@@ -17,6 +17,10 @@ type athenaDriver struct {
 }
 
 func (c *athenaDriver) Query(ctx context.Context, query string) (core.ResultStream, error) {
+	// action := strings.ToLower(strings.Split(query, " ")[0])
+	// if action == "update" || action == "delete" || action == "insert" || action == "merge" {
+	// 	return c.c.Exec(ctx, query)
+	// }
 	return c.c.Query(ctx, query)
 }
 

@@ -28,11 +28,12 @@ type Athena struct{}
 //     AWS Region to run queries on
 //   - `options` is a & delimited list of key=value arguments.
 //
-// The supported `options` are:
-//   - `work_group` define an Athena workgroup to run queries. default=default
-//   - `s3_staging_dir` S3 bucket and path where Athena stores results and metadata
+// One of `work_group` or `s3_staging_dir` must be specified
 //
-// #TODO: Implement actions, currently only supports read only mode
+// The supported `options` are:
+//   - `work_group` define an Athena workgroup to run queries.
+//   - `s3_staging_dir` S3 bucket and path where Athena stores results and metadata
+//   - `read_only` enable read_only connection. default is true
 func (a *Athena) Connect(rawUrl string) (core.Driver, error) {
 	os.Unsetenv("AWS_SDK_LOAD_CONFIG")
 	u, err := url.Parse(rawUrl)
@@ -40,7 +41,6 @@ func (a *Athena) Connect(rawUrl string) (core.Driver, error) {
 		return nil, err
 	}
 	conf := drv.NewNoOpsConfig()
-	conf.SetReadOnly(true)
 
 	if u.Scheme != "athena" {
 		return nil, fmt.Errorf("unexpected scheme: %q", u.Scheme)
@@ -53,17 +53,24 @@ func (a *Athena) Connect(rawUrl string) (core.Driver, error) {
 	}
 
 	params := u.Query()
-	if params.Get("work_group") == "" && params.Get("s3_staging_dir") == "" {
+	workgroup := params.Get("work_group")
+	s3StagingDir := params.Get("s3_staging_dir")
+	readOnly := params.Get("read_only")
+
+	if workgroup == "" && s3StagingDir == "" {
 		return nil, fmt.Errorf("one of work_group or s3_staging_dir must be set in: %s", rawUrl)
 	}
-	if params.Get("work_group") != "" {
-		wg := drv.NewWG(params.Get("work_group"), nil, nil)
+	if workgroup != "" {
+		wg := drv.NewWG(workgroup, nil, nil)
 		conf.SetWorkGroup(wg)
 		conf.SetWGRemoteCreationAllowed(false)
 	}
-	if params.Get("s3_staging_dir") != "" {
-		bucket := params.Get("s3_staging_dir")
-		conf.SetOutputBucket(bucket)
+	if s3StagingDir != "" {
+		conf.SetOutputBucket(s3StagingDir)
+	}
+
+	if readOnly == "false" {
+		conf.SetReadOnly(false)
 	}
 
 	db, err := sql.Open(drv.DriverName, conf.Stringify())
