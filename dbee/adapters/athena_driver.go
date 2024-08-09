@@ -3,6 +3,8 @@ package adapters
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/kndndrj/nvim-dbee/dbee/core"
 	"github.com/kndndrj/nvim-dbee/dbee/core/builders"
@@ -13,7 +15,9 @@ var (
 )
 
 type athenaDriver struct {
-	c *builders.Client
+	c         *builders.Client
+	columns   map[string][]*core.Column
+	structure []*core.Structure
 }
 
 func (c *athenaDriver) Query(ctx context.Context, query string) (core.ResultStream, error) {
@@ -25,23 +29,43 @@ func (c *athenaDriver) Query(ctx context.Context, query string) (core.ResultStre
 }
 
 func (c *athenaDriver) Columns(opts *core.TableOptions) ([]*core.Column, error) {
-	return c.c.ColumnsFromQuery(`
+	schema := strings.Trim(opts.Schema, `"`)
+	key := fmt.Sprintf(`%s%s`, schema, opts.Table)
+	cache_cols, ok := c.columns[key]
+	if ok {
+		return cache_cols, nil
+	}
+	cols, err := c.c.ColumnsFromQuery(`
 			SELECT column_name, data_type
 			FROM information_schema.columns
 			WHERE table_schema = '%s' and table_name = '%s';
-			`, opts.Schema, opts.Table)
+			`, schema, opts.Table)
+
+	if err != nil {
+		return nil, err
+	}
+	c.columns[key] = cols
+	return cols, nil
 }
 
 func (c *athenaDriver) Structure() ([]*core.Structure, error) {
 	query := "SELECT table_schema, table_name, table_type FROM information_schema.tables;"
 
+	if c.structure != nil {
+		return c.structure, nil
+	}
 	rows, err := c.Query(context.TODO(), query)
 	if err != nil {
 		return nil, err
 	}
 
 	// this is compatible with Postgres, reuse some code
-	return getStructure(rows)
+	structure, err := getStructure(rows)
+	if err != nil {
+		return nil, err
+	}
+	c.structure = structure
+	return structure, nil
 }
 
 func (c *athenaDriver) Close() {
@@ -61,7 +85,16 @@ func getStructure(rows core.ResultStream) ([]*core.Structure, error) {
 			return nil, errors.New("could not retrieve structure: insufficient info")
 		}
 
-		schema, table, tableType := row[0].(string), row[1].(string), row[2].(string)
+		var schema string
+		i := 0
+		_, err = fmt.Sscanf(row[0].(string), "%d", &i)
+		if err != nil {
+			schema = row[0].(string)
+		} else {
+			schema = fmt.Sprintf(`"%s"`, row[0].(string))
+		}
+
+		table, tableType := row[1].(string), row[2].(string)
 
 		children[schema] = append(children[schema], &core.Structure{
 			Name:   table,

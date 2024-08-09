@@ -79,7 +79,8 @@ func (a *Athena) Connect(rawUrl string) (core.Driver, error) {
 	}
 
 	client := &athenaDriver{
-		c: builders.NewClient(db),
+		c:       builders.NewClient(db),
+		columns: make(map[string][]*core.Column),
 	}
 	return client, nil
 }
