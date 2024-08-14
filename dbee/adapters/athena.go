@@ -21,7 +21,7 @@ type Athena struct{}
 
 // The format of the url is as follows:
 //
-//	athena://[region][?options]
+//	awsathena://[region][?options]
 //
 // Where:
 //   - `region` is mandatory. It should match the intended
@@ -34,6 +34,7 @@ type Athena struct{}
 //   - `work_group` define an Athena workgroup to run queries.
 //   - `s3_staging_dir` S3 bucket and path where Athena stores results and metadata
 //   - `read_only` enable read_only connection. default is true
+//   - `moneywise` enable printing query cost to stdout. default is true
 func (a *Athena) Connect(rawUrl string) (core.Driver, error) {
 	os.Unsetenv("AWS_SDK_LOAD_CONFIG")
 	u, err := url.Parse(rawUrl)
@@ -42,7 +43,7 @@ func (a *Athena) Connect(rawUrl string) (core.Driver, error) {
 	}
 	conf := drv.NewNoOpsConfig()
 
-	if u.Scheme != "athena" {
+	if u.Scheme != drv.DriverName {
 		return nil, fmt.Errorf("unexpected scheme: %q", u.Scheme)
 	}
 
@@ -56,6 +57,7 @@ func (a *Athena) Connect(rawUrl string) (core.Driver, error) {
 	workgroup := params.Get("work_group")
 	s3StagingDir := params.Get("s3_staging_dir")
 	readOnly := params.Get("read_only")
+	moneywise := params.Get("moneywise")
 
 	if workgroup == "" && s3StagingDir == "" {
 		return nil, fmt.Errorf("one of work_group or s3_staging_dir must be set in: %s", rawUrl)
@@ -71,6 +73,12 @@ func (a *Athena) Connect(rawUrl string) (core.Driver, error) {
 
 	if readOnly == "false" {
 		conf.SetReadOnly(false)
+	}
+
+	if moneywise == "false" {
+		conf.SetMoneyWise(false)
+	} else {
+		conf.SetMoneyWise(true)
 	}
 
 	db, err := sql.Open(drv.DriverName, conf.Stringify())
