@@ -96,11 +96,13 @@ func getStructureFromGlue(ctx context.Context) ([]*core.Structure, map[string][]
 				Schema: formatted_db_name,
 				Type:   getStructureType(*tbl.TableType),
 			})
-			for _, col := range tbl.StorageDescriptor.Columns {
-				cols[key] = append(cols[key], &core.Column{
-					Name: *col.Name,
-					Type: *col.Type,
-				})
+			if tbl.StorageDescriptor != nil {
+				for _, col := range tbl.StorageDescriptor.Columns {
+					cols[key] = append(cols[key], &core.Column{
+						Name: *col.Name,
+						Type: *col.Type,
+					})
+				}
 			}
 		}
 	}
